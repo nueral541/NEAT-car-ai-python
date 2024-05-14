@@ -23,9 +23,9 @@ while running:
 
     keys = pygame.key.get_pressed()
     if keys[pygame.K_RIGHT]:
-        car.on_right()
+        car.on_left()  # change this to on_left
     if keys[pygame.K_LEFT]:
-        car.on_left()
+        car.on_right()  # change this to on_right
     if keys[pygame.K_UP]:
         car.accelerate()
 

@@ -85,22 +85,39 @@ class Car:
         # get the size of the car's image
         car_width, car_height = self.img.get_size()
 
-        # calculate the car's bounding box
-        left = max(int(pos[0]), 0)
-        right = min(int(pos[0]) + car_width, screen.get_width())
-        top = max(int(pos[1]), 0)
-        bottom = min(int(pos[1]) + car_height, screen.get_height())
+        # calculate the relative positions of the corners of the bounding box
+        corners = [(x - car_width / 2, y - car_height / 2) for x in (0, car_width) for y in (0, car_height)]
 
-        # check the color of the pixels within the car's bounding box
-        for x in range(left, right):
-            for y in range(top, bottom):
-                if screen.get_at((x, y)) == color:
-                    return True
+        # calculate the positions of the corners after rotation and translation
+        corners = [self.rotate_point((corner[0] + pos[0], corner[1] + pos[1]), pos, self.direction) for corner in corners]
+
+        # draw a small blue circle at each corner
+        for corner in corners:
+            pygame.draw.circle(screen, (0, 0, 255), (int(corner[0]), int(corner[1])), 5)
+
+        # check the color of the pixels at the corners
+        for corner in corners:
+            if screen.get_at((int(corner[0]), int(corner[1]))) == color:
+                return True
 
         return False
 
+    def rotate_point(self, point, origin, angle):
+        """
+        Rotate a point counterclockwise by a given angle around a given origin.
+
+        The angle should be given in degrees.
+        """
+        angle = math.radians(angle)
+        ox, oy = origin
+        px, py = point
+
+        qx = ox + math.cos(angle) * (px - ox) - math.sin(angle) * (py - oy)
+        qy = oy + math.sin(angle) * (px - ox) + math.cos(angle) * (py - oy)
+
+        return qx, qy
+
     def update(self, screen):
-        """Update the car's position and direction."""
         # calculate the x and y components of the velocity
         velocity_x, velocity_y = self.get_vector(self.direction, self.speed)
 
@@ -108,8 +125,14 @@ class Car:
         new_position = (self.position[0] + velocity_x, self.position[1] + velocity_y)
 
         if self.is_touching_color(self.position, (255, 255, 255), screen):
-            self.position = (0, 0)  # reset position
+            self.position = self.DEFAULT  # reset position
             return  # exit the update method early
+
+        # calculate the starting position of the ray
+        ray_start = (
+            self.position[0] + self.width / 2 + velocity_x,
+            self.position[1] + self.height / 2 + velocity_y,
+        )
 
         # check if the new position is outside the screen boundaries
         screen_width, screen_height = screen.get_size()
@@ -123,7 +146,6 @@ class Car:
             new_position = (new_position[0], screen_height - self.height)
 
         self.position = new_position
-
         self.blit_car(screen, self.position)
         self.direction += (
             self.turn_momentum
