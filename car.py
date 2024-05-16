@@ -1,8 +1,6 @@
 import neat
 import pygame
 import pickle
-import math
-
 
 class Car:
     MAX_ACCELERATION = 5
@@ -13,30 +11,56 @@ class Car:
 
     def __init__(self, direction, img, screen):
         """Initialize the car with a given direction."""
+        self.start_pos = (0, 0)
+        self._acceleration = 5
         self.direction = direction
+        self.direction_offset = 0
         self.img = img
-        self.speed = 0
         self.original_img = self.img
+        self.turn_momentum = 0  # new attribute
+        self.speed = 0  # new attribute
         self.position = self.DEFAULT  # new attribute
-        self.turn_momentum = 0  # new line
-        self.width = self.img.get_width()  # new line
-        self.height = self.img.get_height() # new line
-        
+        self.width = img.get_width()  # new attribute
+        self.height = img.get_height()  # new attribute
+
+    def blit_car(self, screen, pos):
+        """Draw the car on the screen at the given position."""
+        # create a new surface with the same size as the original image and per-pixel alpha
+        new_surface = pygame.Surface(self.original_img.get_size(), pygame.SRCALPHA)
+
+        # fill the new surface with a transparent color
+        new_surface.fill((0, 0, 0, 0))
+
+        # blit the original image onto the new surface
+        new_surface.blit(self.original_img, (0, 0))
+
+        # rotate the new surface and get its rectangle
+        rotated_image = pygame.transform.rotate(new_surface, self.direction)
+        rotated_rect = rotated_image.get_rect(
+            center=self.img.get_rect(topleft=pos).center
+        )
+
+        # draw the rotated image at the adjusted position
+        screen.blit(rotated_image, rotated_rect.topleft)
+
+    @property
+    def acceleration(self):
+        """Get the current acceleration."""
+        return self._acceleration
+
+    @acceleration.setter
+    def acceleration(self, value):
+        """Set the acceleration, ensuring it stays within the desired range."""
+        if self.MIN_ACCELERATION <= value <= self.MAX_ACCELERATION:
+            self._acceleration = value
 
     def on_right(self):
         """Turn the car to the right."""
-        self.direction += 3
-        self.turn_momentum *= 0.9
-
-    def decelerate(self):
-        self.speed -= 0.2  # adjust as needed
-        if self.speed < 0:
-            self.speed = 0
+        self.turn_momentum += 0.4
 
     def on_left(self):
         """Turn the car to the left."""
-        self.direction -= 3
-        self.turn_momentum *= 0.9
+        self.turn_momentum -= 0.4
 
     def accelerate(self):
         if self.speed < self.MAX_ACCELERATION:
@@ -59,82 +83,31 @@ class Car:
         # get the size of the car's image
         car_width, car_height = self.img.get_size()
 
-        # calculate the relative positions of the corners of the bounding box
-        corners = [(x - car_width / 2, y - car_height / 2) for x in (0, car_width) for y in (0, car_height)]
+        # calculate the car's bounding box
+        left = max(int(pos[0]), 0)
+        right = min(int(pos[0]) + car_width, screen.get_width())
+        top = max(int(pos[1]), 0)
+        bottom = min(int(pos[1]) + car_height, screen.get_height())
 
-        # calculate the positions of the corners after rotation and translation
-        corners = [self.rotate_point((corner[0] + pos[0], corner[1] + pos[1]), pos, self.direction) for corner in corners]
-
-        # draw a small blue circle at each corner
-        for corner in corners:
-            pygame.draw.circle(screen, (0, 0, 255), (int(corner[0]), int(corner[1])), 5)
-
-        # check the color of the pixels at the corners
-        for corner in corners:
-            if screen.get_at((int(corner[0]), int(corner[1]))) == color:
-                return True
+        # check the color of the pixels within the car's bounding box
+        for x in range(left, right):
+            for y in range(top, bottom):
+                if screen.get_at((x, y)) == color:
+                    return True
 
         return False
-    
-    def rotate_point(self, point, origin, angle):
-        """
-        Rotate a point counterclockwise by a given angle around a given origin.
-
-        The angle should be given in degrees.
-        """
-        angle = math.radians(angle)
-        ox, oy = origin
-        px, py = point
-
-        qx = ox + math.cos(angle) * (px - ox) - math.sin(angle) * (py - oy)
-        qy = oy + math.sin(angle) * (px - ox) + math.cos(angle) * (py - oy)
-
-        return qx, qy
-    
-    def is_touching_white(self, screen):
-        """Check if any of the car's corners is touching a white pixel."""
-        corners = [(0, 0), (self.width, 0), (0, self.height), (self.width, self.height)]
-        corners = [self.rotate_point((corner[0] + self.position[0], corner[1] + self.position[1]), self.position, self.direction) for corner in corners]
-
-        for corner in corners:
-            x, y = int(corner[0]), int(corner[1])
-            if screen.get_at((x, y)) == (255, 255, 255, 255):  # Check if the pixel is white
-                return True
-
-        return False
-    
-    def blit_car(self, screen, position):
-        """Draw the car on the screen at the given position."""
-        # Rotate the image
-        rotated_img = pygame.transform.rotate(self.img, self.direction)
-
-        new_surface = pygame.Surface(rotated_img.get_size(), pygame.SRCALPHA)
-        new_surface.fill((0, 0, 0, 0))
-        new_surface.blit(rotated_img, (0, 0))
-        new_pos = (
-            position[0] - new_surface.get_width() / 2,
-            position[1] - new_surface.get_height() / 2,
-        )
-        screen.blit(new_surface, new_pos)
 
     def update(self, screen):
+        """Update the car's position and direction."""
         # calculate the x and y components of the velocity
         velocity_x, velocity_y = self.get_vector(self.direction, self.speed)
 
+        # update the position
         new_position = (self.position[0] + velocity_x, self.position[1] + velocity_y)
 
-        if self.is_touching_white(screen):
-            self.position = self.DEFAULT
-
         if self.is_touching_color(self.position, (255, 255, 255), screen):
-            self.position = self.DEFAULT  # reset position
+            self.position = (0, 0)  # reset position
             return  # exit the update method early
-
-        # calculate the starting position of the ray
-        ray_start = (
-            self.position[0] + self.width / 2 + velocity_x,
-            self.position[1] + self.height / 2 + velocity_y,
-        )
 
         # check if the new position is outside the screen boundaries
         screen_width, screen_height = screen.get_size()
@@ -148,6 +121,7 @@ class Car:
             new_position = (new_position[0], screen_height - self.height)
 
         self.position = new_position
+
         self.blit_car(screen, self.position)
         self.direction += (
             self.turn_momentum
