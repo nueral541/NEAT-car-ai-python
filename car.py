@@ -1,6 +1,8 @@
 import neat
 import pygame
 import pickle
+import math
+
 
 class Car:
     MAX_ACCELERATION = 5
@@ -22,6 +24,8 @@ class Car:
         self.position = self.DEFAULT  # new attribute
         self.width = img.get_width()  # new attribute
         self.height = img.get_height()  # new attribute
+        self.angle = 0  # Initialize the angle attribute
+        self.car_mask = pygame.mask.from_surface(self.img)  # The car's mask
 
     def blit_car(self, screen, pos):
         """Draw the car on the screen at the given position."""
@@ -79,23 +83,45 @@ class Car:
 
         return (x, y)
 
-    def is_touching_color(self, pos, color, screen):
-        # get the size of the car's image
-        car_width, car_height = self.img.get_size()
+    def is_touching_color(self, position, color, screen):
+        x, y = position
+        screen_width, screen_height = screen.get_size()
 
-        # calculate the car's bounding box
-        left = max(int(pos[0]), 0)
-        right = min(int(pos[0]) + car_width, screen.get_width())
-        top = max(int(pos[1]), 0)
-        bottom = min(int(pos[1]) + car_height, screen.get_height())
+        # Check if the position is within the screen boundaries
+        if 0 <= x < screen_width and 0 <= y < screen_height:
+            # If the position is within the screen boundaries, check if the pixel at that position is the specified color
+            return screen.get_at((x, y)) == color
+        else:
+            # If the position is outside the screen boundaries, return False
+            return False
+        
+    def rotate(self):
+        self.angle = (self.angle + 1) % 360  # Increment the angle by 1 degree, and wrap it around at 360 degrees
 
-        # check the color of the pixels within the car's bounding box
-        for x in range(left, right):
-            for y in range(top, bottom):
-                if screen.get_at((x, y)) == color:
-                    return True
+        # Save the center of the original image
+        original_center = self.img.get_rect().center
 
-        return False
+        # Rotate the image
+        rotated_img = pygame.transform.rotate(self.img, self.angle)
+
+        # Get a new rect with the center of the original image
+        rotated_rect = rotated_img.get_rect(center=original_center)
+
+        # Create a new mask from the rotated image
+        self.car_mask = pygame.mask.from_surface(rotated_img)
+
+        # Update the image and position
+        self.img = rotated_img
+        self.position = rotated_rect.topleft
+
+    def get_bounding_box(self):
+        """Get the car's bounding box."""
+        return pygame.Rect(
+            self.position[0] - self.width / 2,
+            self.position[1] - self.height / 2,
+            self.width,
+            self.height,
+        )
 
     def update(self, screen):
         """Update the car's position and direction."""
@@ -104,10 +130,6 @@ class Car:
 
         # update the position
         new_position = (self.position[0] + velocity_x, self.position[1] + velocity_y)
-
-        if self.is_touching_color(self.position, (255, 255, 255), screen):
-            self.position = (0, 0)  # reset position
-            return  # exit the update method early
 
         # check if the new position is outside the screen boundaries
         screen_width, screen_height = screen.get_size()
@@ -121,6 +143,8 @@ class Car:
             new_position = (new_position[0], screen_height - self.height)
 
         self.position = new_position
+
+        self.rotate()
 
         self.blit_car(screen, self.position)
         self.direction += (
